@@ -8,6 +8,22 @@ run: run.c
 	$(CC) -O3 -o run run.c -lm
 	$(CC) -O3 -o runq runq.c -lm
 
+# GPU build: matmul() is replaced by the CUDA version in matmul.cu
+.PHONY: runcuda
+runcuda: run.c matmul.cu
+	$(CC) -O3 -DUSE_CUDA -c run.c -o run_cuda.o
+	nvcc -O3 -c matmul.cu -o matmul.o
+	nvcc -O3 -o runcuda run_cuda.o matmul.o -lm
+	rm -f run_cuda.o matmul.o
+
+# GPU build with weights resident in GPU memory (llama_matmul.cu)
+.PHONY: runcuda_resident
+runcuda_resident: run.c llama_matmul.cu
+	$(CC) -O3 -DUSE_CUDA -DUSE_CUDA_RESIDENT -c run.c -o run_cuda_resident.o
+	nvcc -O3 -c llama_matmul.cu -o llama_matmul.o
+	nvcc -O3 -o runcuda_resident run_cuda_resident.o llama_matmul.o -lm
+	rm -f run_cuda_resident.o llama_matmul.o
+
 # useful for a debug build, can then e.g. analyze with valgrind, example:
 # $ valgrind --leak-check=full ./run out/model.bin -n 3
 rundebug: run.c

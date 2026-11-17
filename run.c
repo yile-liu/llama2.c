@@ -214,6 +214,14 @@ void softmax(float* x, int size) {
     }
 }
 
+#ifdef USE_CUDA
+// GPU version, implemented in matmul.cu (naive) or llama_matmul.cu (resident weights)
+void matmul(float* xout, float* x, float* w, int n, int d);
+#ifdef USE_CUDA_RESIDENT
+void matmul_init(float* data, size_t bytes);
+void matmul_free(void);
+#endif
+#else
 void matmul(float* xout, float* x, float* w, int n, int d) {
     // W (d,n) @ x (n,) -> xout (d,)
     // by far the most amount of time is spent inside this little function
@@ -227,6 +235,7 @@ void matmul(float* xout, float* x, float* w, int n, int d) {
         xout[i] = val;
     }
 }
+#endif
 
 float* forward(Transformer* transformer, int token, int pos) {
 
@@ -944,6 +953,9 @@ int main(int argc, char *argv[]) {
     // build the Transformer via the model .bin file
     Transformer transformer;
     build_transformer(&transformer, checkpoint_path);
+#ifdef USE_CUDA_RESIDENT
+    matmul_init(transformer.data, transformer.file_size); // copy all weights to the GPU once
+#endif
     if (steps == 0 || steps > transformer.config.seq_len) steps = transformer.config.seq_len; // override to ~max length
 
     // build the Tokenizer via the tokenizer .bin file
@@ -967,6 +979,9 @@ int main(int argc, char *argv[]) {
     // memory and file handles cleanup
     free_sampler(&sampler);
     free_tokenizer(&tokenizer);
+#ifdef USE_CUDA_RESIDENT
+    matmul_free();
+#endif
     free_transformer(&transformer);
     return 0;
 }
